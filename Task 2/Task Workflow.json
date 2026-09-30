@@ -1,0 +1,476 @@
+{
+  "name": "Task Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "e1894c43-1e89-4a98-9293-04f7d69dfdc8",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/search/repositories",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "topic:ai"
+            },
+            {
+              "name": "sort",
+              "value": "stars"
+            },
+            {
+              "name": "order",
+              "value": "desc"
+            },
+            {
+              "name": "per_page",
+              "value": "10"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "023641c2-3751-4ee1-80ec-40b2d7a182e8",
+      "name": "HTTP Request",
+      "credentials": {
+        "githubApi": {
+          "id": "e3wboXh1INJk5WOy",
+          "name": "GitHub account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $json.full_name }}/releases/latest",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        0
+      ],
+      "id": "00d02f3d-13da-4ad2-9954-60af7556d2d1",
+      "name": "Get Latest Release",
+      "credentials": {
+        "githubApi": {
+          "id": "e3wboXh1INJk5WOy",
+          "name": "GitHub account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Grab the array of repos from the first (and only) incoming item\nconst repos = $input.first().json.items;\n\n// 2. Sort by stars (highest first) and keep only the top 5\nconst top5 = repos\n  .sort((a, b) => b.stargazers_count - a.stargazers_count)\n  .slice(0, 5);\n\n// 3. Keep only the fields we need, and wrap each in { json: ... }\nreturn top5.map((repo) => ({\n  json: {\n    name: repo.name,\n    full_name: repo.full_name,\n    owner: repo.owner.login,\n    stars: repo.stargazers_count,\n    url: repo.html_url,\n    description: repo.description || \"No description\",\n  },\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "6b3bb9b1-5928-4493-b4ba-2d14385d804e",
+      "name": "Top 5 repos"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Data from the earlier \"Top 5 Repos\" node, for the matching item\nconst repo = $(\"Top 5 repos\").item.json;\n\nreturn {\n  json: {\n    ...repo, // keep name, stars, url, etc.\n    release_version: $json.tag_name, // add data from the release call\n    release_date: $json.published_at,\n  },\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "13e9a703-9ba1-40b6-a917-68f6ae516202",
+      "name": "Combine data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3cce5bea-c235-4e24-bb4e-9b00d0bfaf26",
+              "leftValue": "={{ $json.stars }}",
+              "rightValue": 225000,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "d8fe5fe4-3cbb-4420-819c-f66080cd3dbf",
+      "name": "Stars > threshold"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d850851f-1928-47f6-b8f4-eceec8fdd4e1",
+              "name": "label",
+              "value": "🔥 Hot repo",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1344,
+        -96
+      ],
+      "id": "c1804bf4-2842-4798-b50f-2c694c7f7c64",
+      "name": "Label Hot"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2e798e4d-5a15-4344-b31e-a6fbc90d15cb",
+              "name": "label",
+              "value": "📦 Regular repo",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1344,
+        96
+      ],
+      "id": "f0e4b4fa-c09e-4449-af11-1e147723115c",
+      "name": "Label Regular"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1584,
+        0
+      ],
+      "id": "e35723cd-6cb5-4392-a001-484030c6c53d",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const repos = $input.all().map((i) => i.json);\n\n// Highest stars first\nrepos.sort((a, b) => b.stars - a.stars);\n\nconst lines = repos.map(\n  (r, i) =>\n    `${i + 1}. ${r.label} **${r.name}** (⭐ ${r.stars.toLocaleString()})\\n` +\n    `   ${r.description}\\n` +\n    `   Latest release: ${r.release_version} | ${r.url}`,\n);\n\nconst message = \"**Morning Brief: Top AI Repos**\\n\\n\" + lines.join(\"\\n\\n\");\n\nreturn [{ json: { message } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        0
+      ],
+      "id": "c7ae125a-8a8d-4fed-a9b4-7a94b2e867ed",
+      "name": "Build Digest"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=   {{ $json.message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2032,
+        0
+      ],
+      "id": "d111f0a5-a26d-4d4b-b1de-b3226fa8a7c1",
+      "name": "Discord",
+      "webhookId": "d5856579-73ef-4fde-bcd7-5de88d92a026",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "QtbvmfSbKBlNFDZE",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d42a5924-f920-4bf1-b03b-9489d4fd96f0",
+              "name": "error_message",
+              "value": "={{ $json.error.message }}",
+              "type": "string"
+            },
+            {
+              "id": "f2b4afbf-de4f-43a5-b408-bd579cf98121",
+              "name": "failed_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        848,
+        192
+      ],
+      "id": "b34e2de5-11a4-4f2c-bdfb-cadfb8b21da4",
+      "name": "Log Release Failure"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=⚠️ Morning Brief: a release lookup failed.\n   Reason: {{ $json.error_message }}\n   Time: {{ $json.failed_at }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        192
+      ],
+      "id": "f00e9a08-13aa-4c2a-9aff-78d28da63ad4",
+      "name": "Alert Discord",
+      "webhookId": "443e70d2-dda5-4cfc-b78d-59fc319fb1be",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "QtbvmfSbKBlNFDZE",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -16,
+        208
+      ],
+      "id": "01a21deb-d5c5-438e-b4ee-9be51c1627c8",
+      "name": "Schedule Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Top 5 repos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Release Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Top 5 repos": {
+      "main": [
+        [
+          {
+            "node": "Get Latest Release",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Latest Release": {
+      "main": [
+        [
+          {
+            "node": "Combine data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Release Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine data": {
+      "main": [
+        [
+          {
+            "node": "Stars > threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stars > threshold": {
+      "main": [
+        [
+          {
+            "node": "Label Hot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Label Regular",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Hot": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label Regular": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Build Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Digest": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Release Failure": {
+      "main": [
+        [
+          {
+            "node": "Alert Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f3a675a8-4f14-4e0c-a61a-3cb4974e0e35",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a61ced2a79c6f19e57200bd344ba5b98b7b796b6d68ff1b99e257751eb888f55"
+  },
+  "nodeGroups": [],
+  "id": "6Q8PmR5sWTdADM1H",
+  "tags": []
+}
